@@ -17,7 +17,7 @@
 
  camFind
  camList - Array of camera names
- 
+
  * webcam.save() - get base64 encoded JPEG image
  * webcam.setCamera(i) - set camera, camera index retrieved with camList
  * webcam.getResolution() - get camera resolution actually applied
@@ -33,7 +33,7 @@
  * webcam.debug()         - debug callback used from SWF and can be used from javascript side too
  * */
 
-// @edoceo 
+// @edoceo
 // http://livedocs.adobe.com/flex/3/html/help.html?content=Working_with_Sound_19.html
 // http://thinkdiff.net/mixed/getting-external-parameters-in-actionscript-3/
 // Draw Line then Fade it out for Mic Check: http://joshshard.com/blog/?p=19
@@ -81,7 +81,7 @@ public class Preflight extends Sprite {
     private var opt_mic_fg:uint = 0x23cc19;
     private var opt_mic_xy:Array = [ 0, 240 ];
     // private var opt_mic_wh:Array = [ ];
-    private var opt_mic_lo:int = 50; // 1-100 of Volume Level
+    private var opt_mic_lo:int = 30; // 1-100 of Volume Level
 
     private var opt_cam_bg:uint = 0x222222;
     private var opt_cam_fg:uint = 0xeeeeee;
@@ -110,14 +110,15 @@ public class Preflight extends Sprite {
     private var micAudioLevel:int = 0;
 
     private var rectB:Shape;
+    
+    private var objCallback:String = 'preflight';
 
     public function Preflight():void {
 
-        ExternalInterface.call("pf.debug","info","init (w" + Math.floor(stage.stageWidth) + ",h" + Math.floor(stage.stageHeight) + ")");
+        ExternalInterface.call("console.log","init (w" + Math.floor(stage.stageWidth) + ",h" + Math.floor(stage.stageHeight) + ")");
 
         flash.system.Security.allowDomain("*");
-        // stage.scaleMode = this.loaderInfo.parameters["StageScaleMode"];
-        stage.scaleMode = StageScaleMode.NO_SCALE;
+        stage.scaleMode = StageScaleMode.EXACT_FIT;
         stage.quality = StageQuality.BEST;
         // stage.align = ""; // empty string is absolute center
 
@@ -128,34 +129,36 @@ public class Preflight extends Sprite {
         // General
         ExternalInterface.addCallback("getInfo", this.getInfo);
 
-        // Audio Stuff
-        // ExternalInterface.addCallback("listMics", this.listMics);
-        ExternalInterface.addCallback("micFind", this.micFind);
-        ExternalInterface.addCallback("micList", this.micList);
-        // ExternalInterface.addCallback("onMicStatus", this.onMicStatus);
-        // ExternalInterface.addCallback("onMicCheck", this.onMicCheck);
-
-        // Video Stuff
+        // Camera Stuff
         ExternalInterface.addCallback("camFind", this.camFind);
         ExternalInterface.addCallback("camList", this.camList);
+        // ExternalInterface.addCallback("camPick", this.camPick);
+
+        // Microphone Stuff
+        ExternalInterface.addCallback("micFind", this.micFind);
+        ExternalInterface.addCallback("micList", this.micList);
+        // ExternalInterface.addCallback("micPick", this.micPick);
 
         // ExternalInterface.addCallback("save", save);
-        ExternalInterface.addCallback("setCamera", setCamera);
-        ExternalInterface.addCallback("getResolution", getResolution);
+        // ExternalInterface.addCallback("setCamera", setCamera);
+        // ExternalInterface.addCallback("getResolution", getResolution);
         // ExternalInterface.addCallback("getCameraList", getCameraList);
 
         this.camW = stage.stageWidth;
+        // this.camW = stage.stageWidth;
 
         micFind();
-        camFind()
+        camFind();
 
     }
 
     /**
-    
+
     */
     public function getInfo():Object
     {
+        ExternalInterface.call("console.log","getInfo()");
+
         var ret:Object = new Object;
 
         ret.w_ask = this.loaderInfo.parameters["resolutionWidth"];
@@ -169,19 +172,20 @@ public class Preflight extends Sprite {
 
         ret.mic = this.micFind();
 
+        ret.opt = this.loaderInfo.parameters;
 
 //         var resolutionWidth:Number = this.loaderInfo.parameters["resolutionWidth"];
 //         var videoWidth:Number      = Math.floor(resolutionWidth);
-//         
+//
 //         var resolutionHeight:Number = this.loaderInfo.parameters["resolutionHeight"];
 //         var videoHeight:Number      = Math.floor(resolutionHeight);
-//         
+//
 //         var serverWidth:Number  = Math.floor(stage.stageWidth);
 //         var serverHeight:Number = Math.floor(stage.stageHeight);
-//         
+//
 //         ExternalInterface.call("pf.debug","resolutionW",Math.max(videoWidth, serverWidth));
 //         ExternalInterface.call("pg.debug","resolutionH",Math.max(videoHeight, serverHeight));
-//         
+//
         // var result:Array = [Math.max(videoWidth, serverWidth), Math.max(videoHeight, serverHeight)];
         // var result:Array = [ stage.stageWidth, stage.stageHeight ];
         // var result:Array = [ 320, 240 ];
@@ -189,45 +193,50 @@ public class Preflight extends Sprite {
 
         return ret;
     }
-    
-    
+
+
     public function camFind():Object
     {
+        ExternalInterface.call("console.log","camFind()");
+
         camera = Camera.getCamera();
-
-        if (null != camera) {
-            if (ExternalInterface.available) {
-
-                camera = Camera.getCamera('0');
-                // camResolution = getCameraResolution();
-                setupCamera(camera);
-                setVideoCamera(camera);
-
-                /**
-                 * Dont use stage.width & stage.height because result image will be stretched
-                 */
-                bmd = new BitmapData(camW, camH);
-
-                try {
-                    var containerReady:Boolean = isContainerReady();
-                    if (containerReady) {
-                        setupCallbacks();
-                    }  else {
-                        var readyTimer:Timer = new Timer(250);
-                        readyTimer.addEventListener(TimerEvent.TIMER, timerHandler);
-                        readyTimer.start();
-                    }
-                } catch (err:Error) { } finally { }
-            } else {
-
-            }
-
-            ExternalInterface.call("pf.camReady");
-
-        } else {
-            extCall('noCameraFound');
+        if (null == camera) {
+            ExternalInterface.call(this.objCallback + ".onCamNotFound");
+            return null;
         }
-        
+
+        if (camera.muted) {
+            Security.showSettings(SecurityPanel.CAMERA);
+        }
+
+        if (ExternalInterface.available) {
+
+            camera = Camera.getCamera('0');
+            // camResolution = getCameraResolution();
+            setupCamera(camera);
+            setVideoCamera(camera);
+
+            /**
+             * Dont use stage.width & stage.height because result image will be stretched
+             */
+            bmd = new BitmapData(camW, camH);
+
+            try {
+                var containerReady:Boolean = isContainerReady();
+                if (containerReady) {
+                    // setupCallbacks();
+                }  else {
+                    // var readyTimer:Timer = new Timer(250);
+                    // readyTimer.addEventListener(TimerEvent.TIMER, timerHandler);
+                    // readyTimer.start();
+                }
+            } catch (err:Error) { } finally { }
+        } else {
+
+        }
+
+        ExternalInterface.call(this.objCallback + ".onCamFound");
+
         var ret:Object = new Object;
         ret.name = camera.name;
 
@@ -264,42 +273,43 @@ public class Preflight extends Sprite {
     private function statusHandler(event:StatusEvent):void {
             if (event.code == "Camera.Unmuted") {
                 camera.removeEventListener(StatusEvent.STATUS, statusHandler);
-                extCall('cameraEnabled');
+                // extCall('cameraEnabled');
             } else {
-                extCall('cameraDisabled');
+                // extCall('cameraDisabled');
             }
     }
 
-    private function extCall(func:String):Boolean {
-            var target:String = this.loaderInfo.parameters["callTarget"];
-            ExternalInterface.call('pf.debug',target + "." + func);
-            return ExternalInterface.call(target + "." + func);
+    //private function extCall(func:String):Boolean {
+    //        var target:String = this.loaderInfo.parameters["callTarget"];
+    //        // ExternalInterface.call("console.log",target + "." + func);
+    //        return ExternalInterface.call(this.objCallback + "." + func);
+    //}
+
+    private function isContainerReady():Boolean
+    {
+        var result:Boolean = ExternalInterface.call(this.objCallback + ".onReady");
+        return result;
     }
 
-    private function isContainerReady():Boolean {
-            var result:Boolean = extCall("isClientReady");
-            return result;
-    }
+    // private function setupCallbacks():void {
+    // 
+    //         extCall('cameraConnected');
+    //         /* when we have pernament accept policy --> */
+    //         if (!camera.muted) {
+    //             extCall('cameraEnabled');
+    //         } else {
+    //             Security.showSettings(SecurityPanel.PRIVACY);
+    //         }
+    //         /* when we have pernament accept policy <-- */
+    // }
 
-    private function setupCallbacks():void {
-
-            extCall('cameraConnected');
-            /* when we have pernament accept policy --> */
-            if (!camera.muted) {
-                extCall('cameraEnabled');
-            } else {
-                Security.showSettings(SecurityPanel.PRIVACY);
-            }
-            /* when we have pernament accept policy <-- */
-    }
-
-    private function timerHandler(event:TimerEvent):void {
-            var isReady:Boolean = isContainerReady();
-            if (isReady) {
-                Timer(event.target).stop();
-                setupCallbacks();
-            }
-        }
+//    private function timerHandler(event:TimerEvent):void {
+//            var isReady:Boolean = isContainerReady();
+//            if (isReady) {
+//                Timer(event.target).stop();
+//                // setupCallbacks();
+//            }
+//        }
 
         /**
             Returns actual resolution used by camera
@@ -338,136 +348,139 @@ public class Preflight extends Sprite {
             return string;
         }
 
-        /**
-            Finds a Microphone
-        */
-        public function micFind():Object
+    /**
+        Finds a Microphone
+    */
+    public function micFind():Object
+    {
+        ExternalInterface.call("console.log","micFind()");
+
+        mic = Microphone.getMicrophone();
+        mic.setLoopBack(true);
+        // mic.setSilenceLevel(10, 1000);
+        mic.setUseEchoSuppression(true);
+        mic.addEventListener(ActivityEvent.ACTIVITY, this.onMicActivity);
+        mic.addEventListener(StatusEvent.STATUS, this.onMicStatus);
+        mic.addEventListener(SampleDataEvent.SAMPLE_DATA, this.drawMicData);
+
+        // var micDetails:String = "Sound input device name: " + mic.name + '\n';
+        // micDetails += "Gain: " + mic.gain + '\n';
+        // micDetails += "Rate: " + mic.rate + " kHz" + '\n';
+        // micDetails += "Muted: " + mic.muted + '\n';
+        // micDetails += "Silence level: " + mic.silenceLevel + '\n';
+        // micDetails += "Silence timeout: " + mic.silenceTimeout + '\n';
+        // micDetails += "Echo suppression: " + mic.useEchoSuppression + '\n';
+        // trace(micDetails);
+        // var json : String = "{a: 1, b: 'hello world', c: [1, 3, 4, 5]}";
+
+        var ret:Object = new Object; // = ExternalInterface.call("function( ) { return " + json + ";"}");
+        ret.name = mic.name;
+        ret.gain = mic.gain;
+        ret.rate = mic.rate;
+        ret.mute = mic.muted;
+
+        ExternalInterface.call(this.objCallback + ".onMicFound",ret);
+
+        return ret;
+    }
+
+    /**
+        Return a List of Microphones
+    */
+    public function micList():Array {
+        var list:Array = Microphone.names;
+        return list;
+    }
+
+    /**
+        Call Out to External
+    */
+    private function onMicActivity(e:ActivityEvent):void
+    {
+        // ExternalInterface.call("pf.debug","info","onMicActivity");
+        if (e.activating) {
+            //
+        } else {
+            this.micDrawLine();
+        }
+
+        // Callout
+        ExternalInterface.call(this.objCallback + ".onMicActivity",e.activating,mic.activityLevel);
+    }
+
+    /**
+        Call Out to External
+    */
+    private function onMicStatus(e:StatusEvent):void
+    {
+        ExternalInterface.call("console.log","preflight.onMicStatus()");
+        // ExternalInterface.call("pf.onMicStatus",event); //  + event.level + ", code=" + event.code);
+    }
+
+    /**
+        Draw the Audio Stream
+    */
+    private function drawMicData(event:SampleDataEvent):void {
+        // ExternalInterface.call("pf.debug","info","drawMicData");
+        // var myData:ByteArray = eventObject.data;
+        var myData:ByteArray = event.data;
+        var nScale:Number = 64;
+        var nCenter:Number = 240+32; // stage.stageHeight; //  - 2;
+
+        rectB.graphics.clear();
+        rectB.graphics.beginFill(this.opt_mic_bg);
+        rectB.graphics.drawRect(this.opt_mic_xy[0],this.opt_mic_xy[1],Math.floor(stage.stageWidth),64);
+        rectB.graphics.endFill();
+
+        rectB.graphics.lineStyle(0, this.opt_mic_fg);
+        rectB.graphics.moveTo(0, nCenter); // Math.floor(stage.stageHeight) - (nScale / 2)
+        // myGraphics.z = 1000;
+
+        var nPitch:Number = nWidth / myData.length;
+        while (myData.bytesAvailable > 0)
         {
-            ExternalInterface.call("pf.debug","info","micFind");
-            mic = Microphone.getMicrophone();
-            mic.setLoopBack(true);
-            // mic.setSilenceLevel(10, 1000);
-            mic.setUseEchoSuppression(true);
-            mic.addEventListener(ActivityEvent.ACTIVITY, this.onMicActivity);
-            mic.addEventListener(StatusEvent.STATUS, this.onMicStatus); 
-            mic.addEventListener(SampleDataEvent.SAMPLE_DATA, this.drawMicData);
-
-            // var micDetails:String = "Sound input device name: " + mic.name + '\n'; 
-            // micDetails += "Gain: " + mic.gain + '\n'; 
-            // micDetails += "Rate: " + mic.rate + " kHz" + '\n'; 
-            // micDetails += "Muted: " + mic.muted + '\n'; 
-            // micDetails += "Silence level: " + mic.silenceLevel + '\n'; 
-            // micDetails += "Silence timeout: " + mic.silenceTimeout + '\n'; 
-            // micDetails += "Echo suppression: " + mic.useEchoSuppression + '\n'; 
-            // trace(micDetails);
-            // var json : String = "{a: 1, b: 'hello world', c: [1, 3, 4, 5]}";
-
-            var ret:Object = new Object; // = ExternalInterface.call("function( ) { return " + json + ";"}");
-            ret.name = mic.name;
-            ret.gain = mic.gain;
-            ret.rate = mic.rate;
-            ret.mute = mic.muted;
-
-            return ret;
+            var nX:Number = myData.position * nPitch;
+            var nY:Number = myData.readFloat() * nScale + nCenter;
+            rectB.graphics.lineTo(nX, nY);
         }
 
-        /**
-            Return a List of Microphones
-        */
-        public function micList():Array {
-            var list:Array = Microphone.names;
-            return list;
+        if (this.mic.activityLevel > this.opt_mic_lo) {
+            // ExternalInterface.call("console.log","drawMicData(Loud+2)");
+            ExternalInterface.call(this.objCallback + ".onMicCheck",Math.floor(this.mic.activityLevel));
         }
+    }
 
-        /**
-            Call Out to External
-        */
-        private function onMicActivity(e:ActivityEvent):void
-        {
-            // ExternalInterface.call("pf.debug","info","onMicActivity");
-            if (e.activating) {
-                // 
-            } else {
-                this.micDrawLine();
-            }
+    /**
+        Draws the Default State, dark rectangle with green.
+    */
+    private function micDrawLine():void
+    {
+        rectB.graphics.clear();
+        rectB.graphics.beginFill(this.opt_mic_bg);
+        rectB.graphics.drawRect(this.opt_mic_xy[0],this.opt_mic_xy[1],Math.floor(stage.stageWidth),64);
+        rectB.graphics.endFill();
+        rectB.graphics.lineStyle(0, this.opt_mic_fg);
+        rectB.graphics.moveTo(0, 240 + 32); // Math.floor(stage.stageHeight) - (nScale / 2)
+        rectB.graphics.lineTo(stage.stageWidth, 240 + 32);
+    }
 
-            // Callout
-            ExternalInterface.call("pf.onMicActivity",e.activating,mic.activityLevel);
-        }
-
-        /**
-            Call Out to External
-        */
-        private function onMicStatus(e:StatusEvent):void 
-        {
-            ExternalInterface.call("pf.debug","info","onMicStatus");
-            // ExternalInterface.call("pf.onMicStatus",event); //  + event.level + ", code=" + event.code);
-        }
-
-        /**
-            Draw the Audio Stream
-        */
-        private function drawMicData(event:SampleDataEvent):void {
-            // ExternalInterface.call("pf.debug","info","drawMicData");
-            // var myData:ByteArray = eventObject.data;
-            var myData:ByteArray = event.data;
-            var nScale:Number = 64;
-            var nCenter:Number = 240+32; // stage.stageHeight; //  - 2;
-
-            rectB.graphics.clear();
-            rectB.graphics.beginFill(this.opt_mic_bg);
-            rectB.graphics.drawRect(this.opt_mic_xy[0],this.opt_mic_xy[1],Math.floor(stage.stageWidth),64);
-            rectB.graphics.endFill();
-
-            rectB.graphics.lineStyle(0, this.opt_mic_fg);
-            rectB.graphics.moveTo(0, nCenter); // Math.floor(stage.stageHeight) - (nScale / 2)
-            // myGraphics.z = 1000;
-
-            var nPitch:Number = nWidth / myData.length;
-            while (myData.bytesAvailable > 0) 
-            {
-                var nX:Number = myData.position * nPitch;
-                var nY:Number = myData.readFloat() * nScale + nCenter;
-                rectB.graphics.lineTo(nX, nY);
-            }
-
-            if (this.mic.activityLevel > 30) { // this.opt_mic_lo) {
-                // ExternalInterface.call("pf.debug","info","drawMicData-Loud");
-                ExternalInterface.call("pf.onMicCheck",Math.floor(this.mic.activityLevel));
-            }
-        }
-
-        /**
-            Draws the Default State, dark rectangle with green.
-        */
-        private function micDrawLine():void
-        {
-            rectB.graphics.clear();
-            rectB.graphics.beginFill(this.opt_mic_bg);
-            rectB.graphics.drawRect(this.opt_mic_xy[0],this.opt_mic_xy[1],Math.floor(stage.stageWidth),64);
-            rectB.graphics.endFill();
-            rectB.graphics.lineStyle(0, this.opt_mic_fg);
-            rectB.graphics.moveTo(0, 240 + 32); // Math.floor(stage.stageHeight) - (nScale / 2)
-            rectB.graphics.lineTo(stage.stageWidth, 240 + 32);
-        }
-
-        /**
-            Draw Containers for our Video and our Sound Meter
-        */
-        private function drawBoxes():void
-        {
-            // Add the Video Layer
+    /**
+        Draw Containers for our Video and our Sound Meter
+    */
+    private function drawBoxes():void
+    {
+        // Add the Video Layer
 //            var rectA:Shape = new Shape;
 //            rectA.graphics.beginFill(this.opt_cam_bg);
 //            rectA.graphics.drawRect(this.opt_cam_xy[0],this.opt_cam_xy[1],Math.floor(stage.stageWidth),240);
 //            rectA.graphics.endFill();
 //            addChild(rectA);
 
-            // Audio Layer
+        // Audio Layer
 //            var audioLayer:Sprite = new Sprite;
 
-            this.rectB = new Shape;
-            this.micDrawLine();
+        this.rectB = new Shape;
+        this.micDrawLine();
 //            audioLayer.addChild(rectB);
 //
 //            // Text Label
@@ -479,26 +492,27 @@ public class Preflight extends Sprite {
 //            // textS.moveTo(1,240+64);
 //            audioLayer.addChild(textS);
 
-            stage.addChild(rectB);
+        stage.addChild(rectB);
 
-            // Download/Upload Box
-            // var rectC:Shape = new Shape;
-            // rectC.graphics.beginFill(this.opt_mic_fg);
-            // rectC.graphics.drawRect(0,240+64,Math.floor(stage.stageWidth),16);
-            // rectC.graphics.endFill();
-            // stage.addChild(rectC);
+        // Download/Upload Box
+        // var rectC:Shape = new Shape;
+        // rectC.graphics.beginFill(this.opt_mic_fg);
+        // rectC.graphics.drawRect(0,240+64,Math.floor(stage.stageWidth),16);
+        // rectC.graphics.endFill();
+        // stage.addChild(rectC);
 
-        }
-
-        /**
-            Load Parameters
-        */
-        private function readParameters():void
-        {
-            // this.loaderInfo.parameters
-            // this.loaderInfo.parameters
-
-        }
     }
-}
+
+    /**
+        Load Parameters
+    */
+    private function readParameters():void
+    {
+        // this.loaderInfo.parameters
+        // this.loaderInfo.parameters
+
+    }
+
+} // Class
+} // Package
 
